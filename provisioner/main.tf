@@ -1,39 +1,9 @@
-terraform {
-  required_providers {
-    digitalocean = {
-      source = "digitalocean/digitalocean"
-      version = ">= 2.8.0"
-    }
-  }
-}
-
-# DO slug reference:
-# https://slugs.do-api.dev/
-
-variable "do_token" {}
-
-variable "droplet_region" {
-  type = "string"
-  description = "Region of the droplet"
-  default = "sgp1"
-}
-
-variable "droplet_size" {
-  type = "string"
-  description = "Droplet size/configuration"
-  default = "s-1vcpu-2gb"
-}
-
-provider "digitalocean" {
-  token = var.do_token
-}
-
-resource "digitalocean_droplet" "iit-cms" {
+resource "digitalocean_droplet" "iit_cms" {
   image = "ubuntu-20-04-x64"
   name = "iit-cms"
   region = var.droplet_region
   size = var.droplet_size
-  count = 1
+  ssh_keys = [digitalocean_ssh_key.iit_cms_key.id]
   user_data = <<EOF
   #cloud-config
   groups:
@@ -60,11 +30,36 @@ resource "digitalocean_droplet" "iit-cms" {
     # install docker-compose following the guide: https://docs.docker.com/compose/install/
     - sudo curl -L "https://github.com/docker/compose/releases/download/1.25.4/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
     - sudo chmod +x /usr/local/bin/docker-compose
-    # clone repository
-    - git clone https://github.com/IIT-Dev/iit-cms.git
   power_state:
     mode: reboot
     message: Restarting after installing docker & docker-compose
   EOF
 }
+
+# Project
+resource "digitalocean_project" "iit_cms" {
+  name        = "IIT CMS"
+  description = "Project specifically for IIT's CMS"
+  purpose     = "Web Application"
+  environment = "Production"
+  resources   = [digitalocean_droplet.iit_cms.urn]
+}
+
+# SSH key
+resource "digitalocean_ssh_key" "iit_cms_key" {
+  name = "iit_cms_key"
+  public_key = tls_private_key.generated.public_key_openssh
+}
+
+resource "tls_private_key" "generated" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+
+  provisioner "local-exec" {
+    command = "echo '${tls_private_key.generated.private_key_pem}' > ./key.pem"
+  }
+}
+
+
+
 
